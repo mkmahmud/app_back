@@ -1,0 +1,309 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  superadmin
+  admin
+  user
+  viewer
+}
+
+enum ActivityAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  USER_LOGIN
+  USER_LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  EMAIL_VERIFIED
+  SETTINGS_UPDATED
+  ROLE_CHANGED
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}
+
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  name            String
+  password        String
+  avatar          String?
+  role            Role      @default(user)
+  isEmailVerified Boolean   @default(false) @map("is_email_verified")
+  isActive        Boolean   @default(true)  @map("is_active")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt      @map("updated_at")
+
+  // Relations
+  preferences     UserPreferences?
+  refreshTokens   RefreshToken[]
+  activities      ActivityLog[]    @relation("ActivityUser")
+  targetActivities ActivityLog[]   @relation("ActivityTarget")
+  passwordResets  PasswordReset[]
+  emailVerifications EmailVerification[]
+  posts            Post[]
+  comments         Comment[]
+  replies          Reply[]
+  reactions        Reaction[]
+  stories          Story[]
+  savedPosts       SavedPost[]
+ sentRequests     Friendship[] @relation("sentRequests")
+  receivedRequests Friendship[] @relation("receivedRequests")
+
+   @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+
+
+ 
+
+model UserPreferences {
+  id            String  @id @default(uuid())
+  userId        String  @unique @map("user_id")
+  theme         String  @default("system")
+  language      String  @default("en")
+  emailNotifications Boolean @default(true) @map("email_notifications")
+  pushNotifications  Boolean @default(true) @map("push_notifications")
+  inAppNotifications Boolean @default(true) @map("in_app_notifications")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String   @map("user_id")
+  expiresAt  DateTime @map("expires_at")
+  isRevoked  Boolean  @default(false) @map("is_revoked")
+  userAgent  String?  @map("user_agent")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+  @@index([token])
+  @@index([userId])
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verifications")
+  @@index([token])
+}
+
+model ActivityLog {
+  id         String         @id @default(uuid())
+  userId     String         @map("user_id")
+  targetId   String?        @map("target_id")
+  action     ActivityAction
+  targetName String?        @map("target_name")
+  metadata   Json?
+  ipAddress  String?        @map("ip_address")
+  userAgent  String?        @map("user_agent")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  user   User  @relation("ActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+  target User? @relation("ActivityTarget", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+ 
+
+// Feed tables  
+
+model Post {
+  id            String      @id @default(uuid())
+  content       String?     @db.Text
+  imageUrl      String?
+  videoUrl      String?
+  visibility    Visibility  @default(PUBLIC)
+  isDeleted     Boolean     @default(false)
+
+  likeCount     Int         @default(0)
+  commentCount  Int         @default(0)
+  shareCount    Int         @default(0)
+  
+  // Author Relation
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id])
+  
+  // Interaction Relations
+  reactions     Reaction[]
+  comments      Comment[]
+  savedBy       SavedPost[]
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Performance Indexes
+  @@index([createdAt(sort: Desc)])  
+  @@index([authorId, createdAt(sort: Desc)])  
+}
+
+model Reaction {
+  id           String       @id @default(uuid())
+  type         ReactionType
+  
+  // Person who reacted
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  
+  postId       String?
+  post         Post?        @relation(fields: [postId], references: [id])
+  
+  commentId    String?
+  comment      Comment?     @relation(fields: [commentId], references: [id])
+  
+  replyId      String?
+  reply        Reply?       @relation(fields: [replyId], references: [id])
+
+  createdAt    DateTime     @default(now())
+
+  // Constraints: A user can only have ONE reaction per specific item
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@unique([userId, replyId])
+}
+
+model Comment {
+  id           String     @id @default(uuid())
+  content      String     @db.Text
+  isDeleted    Boolean    @default(false)
+  
+  // Relations
+  postId       String
+  post         Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id])
+  
+  reactions    Reaction[]
+  replies      Reply[]
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([postId, createdAt(sort: Asc)]) // Speeds up loading comment sections
+}
+
+model Reply {
+  id           String     @id @default(uuid())
+  content      String     @db.Text
+  
+  // Relations
+  commentId    String
+  comment      Comment    @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id])
+  
+  reactions    Reaction[]
+  
+  createdAt    DateTime   @default(now())
+}
+
+model Friendship {
+  id          String           @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      FriendshipStatus @default(PENDING)
+  
+  sender      User             @relation("sentRequests", fields: [senderId], references: [id])
+  receiver    User             @relation("receivedRequests", fields: [receiverId], references: [id])
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Constraints
+  @@unique([senderId, receiverId])  
+  @@index([status])  
+}
+
+model SavedPost {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  
+  savedAt   DateTime @default(now())
+
+  @@unique([userId, postId])  
+}
+
+model Story {
+  id        String   @id @default(uuid())
+  imageUrl  String
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  
+  createdAt DateTime @default(now())
+  expiresAt DateTime  
+}
