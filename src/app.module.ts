@@ -3,12 +3,15 @@ import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { CacheModule } from '@nestjs/cache-manager'
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER, Reflector } from '@nestjs/core'
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 
 import { validateEnv, appConfig, jwtConfig, authConfig, corsConfig } from './config/app.config'
 import { PrismaModule } from './prisma/prisma.module'
 import { AuthModule } from './auth/auth.module'
 import { UsersModule } from './users/users.module'
 import { DashboardModule } from './dashboard/dashboard.module'
+import { PostModule } from './post/post.module'
 import { HealthController } from './health/health.controller'
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
@@ -16,6 +19,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor'
 import { JwtAuthGuard } from './common/guards'
 import { AppLogger } from './common/logger/logger.service'
+import { AppResolver } from './app.resolver'
 
 @Module({
   imports: [
@@ -43,16 +47,27 @@ import { AppLogger } from './common/logger/logger.service'
       max: 100,      // max 100 cached items
     }),
 
+    // ── GraphQL Modules ───────────────────────────────────────────────────────
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: 'schema.gql', // Switch from true to a physical path string
+      path: '/graphql',
+      playground: true,
+      debug: true, // Enable debug
+      introspection: true,
+    }),
     // ── Feature Modules ───────────────────────────────────────────────────────
     PrismaModule,
     AuthModule,
     UsersModule,
     DashboardModule,
+    PostModule,
   ],
 
   controllers: [HealthController],
 
   providers: [
+    AppResolver,
     AppLogger,
 
     // Global exception filter
@@ -83,4 +98,4 @@ import { AppLogger } from './common/logger/logger.service'
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

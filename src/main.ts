@@ -22,7 +22,7 @@ async function bootstrap() {
   const config = app.get(ConfigService)
   const logger = new Logger('Bootstrap')
   const isDev = config.get<string>('NODE_ENV') !== 'production'
-  const port = config.get<number>('PORT') ?? 8000
+  const port = config.get<number>('PORT') ?? 5000
 
   // ── Logger ────────────────────────────────────────────────────────────────
   app.useLogger(app.get(AppLogger))
@@ -30,10 +30,18 @@ async function bootstrap() {
   // ── Security headers (Helmet) ─────────────────────────────────────────────
   app.use(
     helmet({
-      contentSecurityPolicy: isDev ? false : undefined,
-      crossOriginResourcePolicy: { policy: 'cross-origin' },
-    })
-  )
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: isDev ? false : {
+        directives: {
+          defaultSrc: [`'self'`],
+          styleSrc: [`'self'`, `'unsafe-inline'`, 'cdn.jsdelivr.net', 'fonts.googleapis.com'],
+          fontSrc: [`'self'`, 'fonts.gstatic.com'],
+          imgSrc: [`'self'`, 'data:', 'apollo-server-landing-page.cdn.apollographql.com'],
+          scriptSrc: [`'self'`, `https: 'unsafe-inline'`, 'cdn.jsdelivr.net'],
+        },
+      },
+    }),
+  );
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   const allowedOrigins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:3000')
@@ -98,9 +106,9 @@ async function bootstrap() {
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   app.enableShutdownHooks()
-
+  logger.log('Starting app.listen...');
   await app.listen(port)
-
+  logger.log(`Server running on http://localhost:${port}/api/v1`); // Log 2
   logger.log(`  Server running on http://localhost:${port}/api/v1`)
   logger.log(`  Environment: ${config.get('NODE_ENV')}`)
 }

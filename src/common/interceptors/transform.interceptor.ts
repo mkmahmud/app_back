@@ -17,26 +17,31 @@ export interface ApiResponse<T> {
 
 // Decorator to skip wrapping (e.g. file downloads)
 export const SKIP_TRANSFORM = 'skipTransform'
-
 @Injectable()
 export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
-  constructor(private reflector: Reflector) {}
+  implements NestInterceptor<T, ApiResponse<T>> {
+  constructor(private reflector: Reflector) { }
 
   intercept(
     context: ExecutionContext,
     next: CallHandler
   ): Observable<ApiResponse<T>> {
+    // 1. CHECK CONTEXT TYPE
+    // If it's GraphQL, return the handler immediately without wrapping
+    if (context.getType<string>() === 'graphql') {
+      return next.handle();
+    }
+
+    // 2. CHECK SKIP DECORATOR (Your existing logic)
     const skip = this.reflector.getAllAndOverride<boolean>(SKIP_TRANSFORM, [
       context.getHandler(),
       context.getClass(),
     ])
     if (skip) return next.handle()
 
+    // 3. REST WRAPPING LOGIC
     return next.handle().pipe(
       map(data => {
-        // If handler already returned an ApiResponse shape, pass through
         if (
           data &&
           typeof data === 'object' &&
@@ -49,7 +54,6 @@ export class TransformInterceptor<T>
         return {
           success: true,
           data: data ?? null,
-          message: undefined,
         }
       })
     )
