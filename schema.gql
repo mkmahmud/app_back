@@ -1,0 +1,165 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type PostAuthor {
+  id: ID!
+  name: String!
+  avatar: String
+}
+
+type Comment {
+  id: ID!
+  content: String
+  isDeleted: Boolean!
+  author: PostAuthor!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Post {
+  id: ID!
+  content: String
+  imageUrl: String
+  videoUrl: String
+  visibility: Visibility!
+  isDeleted: Boolean!
+  likeCount: Int!
+  commentCount: Int!
+  shareCount: Int!
+  author: PostAuthor!
+  comments: [Comment!]
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+type PostMeta {
+  page: Int!
+  pageSize: Int!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type PaginatedPosts {
+  posts: [Post!]!
+  meta: PostMeta!
+}
+
+type ReactionResult {
+  type: ReactionType!
+  totalLikes: Int!
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+type ReactionTypeCount {
+  type: ReactionType!
+  count: Int!
+}
+
+type PostReactionUser {
+  userId: ID!
+  name: String!
+  avatar: String
+  reactionType: ReactionType!
+  reactedAt: DateTime!
+}
+
+type PostReactionsSummary {
+  totalReactions: Int!
+  totalsByType: [ReactionTypeCount!]!
+  reactors: [PostReactionUser!]!
+}
+
+type Query {
+  """GraphQL health check"""
+  healthCheck: String!
+
+  """Get paginated feed of posts"""
+  posts(filter: PostsFilterInput): PaginatedPosts!
+
+  """Get a single post by ID"""
+  post(id: ID!): Post!
+
+  """Get total reactions for a specific post"""
+  postReactionCount(postId: ID!): Int!
+
+  """Get total reactions, totals by type, and user-wise reactors for a post"""
+  postReactionsSummary(postId: ID!): PostReactionsSummary!
+
+  """Get saved posts for the current user"""
+  savedPosts: [Post!]!
+}
+
+input PostsFilterInput {
+  page: Int = 1
+  pageSize: Int = 10
+  authorId: String
+  visibility: Visibility
+}
+
+type Mutation {
+  """Create a new post"""
+  createPost(input: CreatePostInput!): Post!
+
+  """Update a post (author only)"""
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+
+  """Delete a post (author or admin)"""
+  deletePost(id: ID!): Boolean!
+
+  """Add a comment to a post"""
+  addComment(input: CreateCommentInput!): Comment!
+
+  """Delete a comment (author or admin)"""
+  deleteComment(id: ID!): Boolean!
+
+  """React to a post. Same type again = toggle off."""
+  reactToPost(input: ReactToPostInput!): ReactionResult!
+
+  """Toggle save/unsave a post"""
+  savePost(postId: ID!): Boolean!
+}
+
+input CreatePostInput {
+  content: String
+  imageUrl: String
+  videoUrl: String
+  visibility: Visibility! = PUBLIC
+}
+
+input UpdatePostInput {
+  content: String
+  imageUrl: String
+  videoUrl: String
+  visibility: Visibility
+}
+
+input CreateCommentInput {
+  postId: String!
+  content: String!
+}
+
+input ReactToPostInput {
+  postId: String!
+  type: ReactionType!
+}

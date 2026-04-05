@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { Reflector } from '@nestjs/core'
+import { GqlExecutionContext, GqlContextType } from '@nestjs/graphql'
 import {
   IS_PUBLIC_KEY,
   ROLES_KEY,
@@ -16,6 +17,15 @@ import { getPermissionsForRole } from '@/config/roles.config'
 import type { Role, Permission } from '@/config/roles.config'
 import type { JwtPayload } from '../decorators/current-user.decorator'
 
+// ─── Helper: extract request from REST or GQL context ────────────────────────
+function getRequest(context: ExecutionContext) {
+  if (context.getType<GqlContextType>() === 'graphql') {
+    const ctx = GqlExecutionContext.create(context)
+    return ctx.getContext<{ req: Express.Request }>().req
+  }
+  return context.switchToHttp().getRequest()
+}
+
 // ─── JWT Guard ────────────────────────────────────────────────────────────────
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -24,13 +34,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   canActivate(context: ExecutionContext) {
-    // Skip auth for @Public() routes
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ])
     if (isPublic) return true
+
     return super.canActivate(context)
+  }
+
+  // Override to extract request from GQL context for passport
+  getRequest(context: ExecutionContext) {
+    return getRequest(context)
   }
 
   handleRequest<T = JwtPayload>(err: Error, user: T): T {
@@ -56,7 +71,8 @@ export class RolesGuard implements CanActivate {
     ])
     if (!requiredRoles?.length) return true
 
-    const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>()
+    const req = getRequest(context)
+    const user = req?.user as JwtPayload | undefined
     if (!user) throw new UnauthorizedException()
 
     if (!requiredRoles.includes(user.role as Role)) {
@@ -77,11 +93,12 @@ export class PermissionsGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const requiredPermissions = this.reflector.getAllAndOverride<Permission[]>(
       PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()]
+      [context.getHandler(), context.getClass()],
     )
     if (!requiredPermissions?.length) return true
 
-    const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>()
+    const req = getRequest(context)
+    const user = req?.user as JwtPayload | undefined
     if (!user) throw new UnauthorizedException()
 
     const userPermissions = getPermissionsForRole(user.role as Role)

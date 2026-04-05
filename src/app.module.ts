@@ -3,8 +3,9 @@ import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { CacheModule } from '@nestjs/cache-manager'
 import { APP_GUARD, APP_INTERCEPTOR, APP_FILTER, Reflector } from '@nestjs/core'
-import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { GraphQLModule } from '@nestjs/graphql'
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo'
+import { Request } from 'express'
 
 import { validateEnv, appConfig, jwtConfig, authConfig, corsConfig } from './config/app.config'
 import { PrismaModule } from './prisma/prisma.module'
@@ -35,27 +36,31 @@ import { AppResolver } from './app.resolver'
     ThrottlerModule.forRoot([
       {
         name: 'default',
-        ttl: 60_000,    // 1 minute window
-        limit: 100,     // 100 requests per window globally
+        ttl: 60_000,
+        limit: 100,
       },
     ]),
 
     // ── Response Caching ──────────────────────────────────────────────────────
     CacheModule.register({
       isGlobal: true,
-      ttl: 60_000,   // 60 seconds default
-      max: 100,      // max 100 cached items
+      ttl: 60_000,
+      max: 100,
     }),
 
-    // ── GraphQL Modules ───────────────────────────────────────────────────────
+    // ── GraphQL ───────────────────────────────────────────────────────────────
+    // CRITICAL: Pass the Express `req` object into the GQL context so that
+    // JwtAccessStrategy (cookie extractor) and CurrentUser decorator work.
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: 'schema.gql', // Switch from true to a physical path string
+      autoSchemaFile: 'schema.gql',
       path: '/graphql',
       playground: true,
-      debug: true, // Enable debug
+      debug: true,
       introspection: true,
+      context: ({ req }: { req: Request }) => ({ req }),
     }),
+
     // ── Feature Modules ───────────────────────────────────────────────────────
     PrismaModule,
     AuthModule,
@@ -70,20 +75,20 @@ import { AppResolver } from './app.resolver'
     AppResolver,
     AppLogger,
 
-    // Global exception filter
+    // Global exception filter — handles both REST & GQL
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
     },
 
-    // Global JWT guard (use @Public() to skip)
+    // Global JWT guard — handles both REST & GQL (use @Public() to skip)
     {
       provide: APP_GUARD,
       useFactory: (reflector: Reflector) => new JwtAuthGuard(reflector),
       inject: [Reflector],
     },
 
-    // Global response transform → { success, data }
+    // Global response transform → { success, data } for REST only
     {
       provide: APP_INTERCEPTOR,
       useFactory: (reflector: Reflector) => new TransformInterceptor(reflector),
@@ -98,4 +103,4 @@ import { AppResolver } from './app.resolver'
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

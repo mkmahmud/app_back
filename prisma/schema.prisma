@@ -189,7 +189,7 @@ model Post {
   commentCount  Int         @default(0)
   shareCount    Int         @default(0)
   
-  // Author Relation
+  // Author Relation 
   authorId      String
   author        User        @relation(fields: [authorId], references: [id])
   

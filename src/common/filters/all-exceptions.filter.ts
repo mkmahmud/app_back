@@ -6,6 +6,8 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common'
+import { GqlArgumentsHost, GqlContextType } from '@nestjs/graphql'
+import { GraphQLError } from 'graphql'
 import { Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { ZodError } from 'zod'
@@ -24,21 +26,41 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name)
 
   catch(exception: unknown, host: ArgumentsHost) {
+    // ── GraphQL context ───────────────────────────────────────────────────────
+    if (host.getType<GqlContextType>() === 'graphql') {
+      const gqlHost = GqlArgumentsHost.create(host)
+      const errorResponse = this.buildErrorResponse(exception)
+
+      this.logger.warn(
+        `GraphQL Error → ${errorResponse.code}: ${errorResponse.message}`,
+      )
+
+      // Re-throw as a GraphQLError so Apollo formats it correctly
+      throw new GraphQLError(errorResponse.message, {
+        extensions: {
+          code: errorResponse.code,
+          statusCode: errorResponse.statusCode,
+          details: errorResponse.details,
+          success: false,
+        },
+      })
+    }
+
+    // ── REST / HTTP context ───────────────────────────────────────────────────
     const ctx = host.switchToHttp()
     const response = ctx.getResponse<Response>()
     const request = ctx.getRequest<Request>()
 
     const errorResponse = this.buildErrorResponse(exception)
 
-    // Don't log 4xx client errors as errors (except 500)
     if (errorResponse.statusCode >= 500) {
       this.logger.error(
         `${request.method} ${request.url} → ${errorResponse.statusCode}`,
-        exception instanceof Error ? exception.stack : String(exception)
+        exception instanceof Error ? exception.stack : String(exception),
       )
     } else {
       this.logger.warn(
-        `${request.method} ${request.url} → ${errorResponse.statusCode}: ${errorResponse.message}`
+        `${request.method} ${request.url} → ${errorResponse.statusCode}: ${errorResponse.message}`,
       )
     }
 
@@ -59,7 +81,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const resp = exceptionResponse as Record<string, unknown>
         message = (resp.message as string) || message
         code = (resp.code as string) || code
-        // Class-validator errors come as array
         if (Array.isArray(resp.message)) {
           details = resp.message
           message = 'Validation failed'
@@ -111,7 +132,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    // ── Unknown / Unhandled ────────────────────────────────────────────────────
+    // ── Unknown / Unhandled ───────────────────────────────────────────────────
     return {
       success: false,
       data: null,
