@@ -1,14 +1,9 @@
 # Buddy Script Backend — NestJS + PostgreSQL + Prisma
 
-Production-ready **NestJS 10** REST API backend for the Buddy Script. Fully typed with TypeScript, validated with **Zod**, persisted with **Prisma + PostgreSQL**, and secured with JWT, RBAC, rate limiting, and Helmet.
+Production-ready **NestJS 10** backend for Buddy Script with both **REST** and **GraphQL** APIs. Fully typed with TypeScript, validated with **Zod**, persisted with **Prisma + PostgreSQL**, and secured with JWT, RBAC, rate limiting, and Helmet.
 
 ---
-
-## 🗺️ Database Design (ERD)
-
-![Database ERD](./ERD.png)
-
----
+ 
 
 ## 🗂️ Project Structure
 
@@ -27,6 +22,13 @@ src/
 │   ├── users.service.ts                      — Paginated CRUD, RBAC-aware
 │   ├── users.controller.ts                  
 │   └── users.module.ts
+│
+├── post/
+│   ├── post.inputs.ts                        — GraphQL inputs (post, comment, reaction)
+│   ├── post.types.ts                         — GraphQL object types + enums + pagination
+│   ├── post.service.ts                       — Feed, privacy rules, comments, reactions, saves
+│   ├── post.resolver.ts                      — Protected GraphQL queries + mutations
+│   └── post.module.ts
 │
 ├── dashboard/
 │   ├── dashboard.service.ts                  — Stats aggregation + activity feed
@@ -113,6 +115,14 @@ All auth endpoints live under `/api/auth/`:
 | `POST` | `/auth/change-password` | 🔒 | Change password (re-login required) |
 | `POST` | `/auth/verify-email` | Public | Verify email token |
 
+### Auth module features
+- Zod-validated DTOs for login, register, refresh, forgot/reset password, verify email, and change password
+- Local credential validation with `bcryptjs` password verification
+- HTTP-only cookie support for both `auth_token` and `refresh_token`
+- Refresh token rotation with DB persistence and revocation support
+- Activity logging for login/logout/password and email verification actions
+- Account safety protections: rate limits, email enumeration protection, and forced re-login after password changes
+
 ### Token strategy
 - **Access token**: JWT, 1h expiry, attached via `Authorization: Bearer` header **and** `auth_token` HTTP-only cookie
 - **Refresh token**: JWT, 7d expiry, stored in DB + `refresh_token` HTTP-only cookie
@@ -141,6 +151,43 @@ All auth endpoints live under `/api/auth/`:
 | `GET` | `/dashboard` | `dashboard:view` | Combined stats + activity (30s cache) |
 | `GET` | `/dashboard/stats` | `dashboard:view` | Stats only (1min cache) |
 | `GET` | `/dashboard/activity?limit=10` | `dashboard:view` | Activity feed |
+
+---
+
+## 📝 Post Module (GraphQL)
+
+Post features are exposed via GraphQL at `/graphql` and are protected with JWT auth guard.
+
+### Post module features
+- Paginated feed with author filter, visibility filter, and feed metadata (`page`, `totalPages`, next/previous flags)
+- Visibility-aware access: public posts for all authenticated users, private posts for owners only
+- Create/update/delete posts with ownership checks (admins can delete any post)
+- Comment system with add/delete actions and automatic `commentCount` updates
+- Reactions with toggle behavior (same reaction removes, new reaction updates) and summary breakdown by type
+- Save/unsave posts and fetch saved posts for the current user
+- Soft-delete behavior for posts and comments to preserve data integrity
+
+### GraphQL Queries
+
+| Query | Description |
+|---|---|
+| `posts(filter)` | Get paginated post feed |
+| `post(id)` | Get single post by ID |
+| `postReactionCount(postId)` | Get total reaction count for a post |
+| `postReactionsSummary(postId)` | Get totals by reaction type + user reaction list |
+| `savedPosts` | Get current user's saved posts |
+
+### GraphQL Mutations
+
+| Mutation | Description |
+|---|---|
+| `createPost(input)` | Create a post (content/image/video + visibility) |
+| `updatePost(id, input)` | Update own post |
+| `deletePost(id)` | Delete own post (or any post if admin/superadmin) |
+| `addComment(input)` | Add a comment to a post |
+| `deleteComment(id)` | Delete own comment (or any comment if admin/superadmin) |
+| `reactToPost(input)` | Add/update/remove reaction on a post |
+| `savePost(postId)` | Toggle save/unsave post |
 
 ---
 

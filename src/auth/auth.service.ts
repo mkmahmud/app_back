@@ -51,7 +51,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private config: ConfigService
-  ) {}
+  ) { }
 
   // ─── Validate credentials (used by LocalStrategy) ─────────────────────────
 

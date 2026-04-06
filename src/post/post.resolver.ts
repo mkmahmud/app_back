@@ -35,9 +35,7 @@ export class PostResolver {
   // ─── Queries ───────────────────────────────────────────────────────────────
 
   /**
-   * Get paginated feed of posts.
-   * Public endpoint: authenticated users see private posts they own,
-   * unauthenticated users (if @Public is used) see only public posts.
+   * Get paginated feed of posts. 
    */
   @Query(() => PaginatedPosts, { name: 'posts', description: 'Get paginated feed of posts' })
   async getPosts(
